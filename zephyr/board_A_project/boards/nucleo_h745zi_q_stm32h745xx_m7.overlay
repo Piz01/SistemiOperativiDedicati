@@ -1,0 +1,16 @@
+/ {
+    chosen {
+        zephyr,sram = &sram0;
+    };
+};
+
+&sram0 {
+    reg = <0x24000000 0x80000>;
+};
+
+&usart2 {
+    status = "okay";
+    current-speed = <115200>;
+    pinctrl-0 = <&usart2_tx_pd5 &usart2_rx_pd6>;
+    pinctrl-names = "default";
+};
