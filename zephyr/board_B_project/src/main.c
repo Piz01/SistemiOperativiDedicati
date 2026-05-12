@@ -7,31 +7,31 @@
 #include "network.h"
 #include "stai.h"
 
-// Protocollo di comunicazione tra il PC e la board
+// Protocollo di comunicazione tra le board
 #define MAGIC_0      0xAA
 #define MAGIC_1      0xBB
-#define TYPE_ACK     0x03   // B → A: pronto
-#define TYPE_ERR     0x04   // B → A: errore
-#define TYPE_NONE    0x05   // B → A: nessuna targa
-#define TYPE_CROP    0x06   // A → B: crop 128×64 grayscale
-#define TYPE_TEXT    0x07   // B → A: stringa targa
+#define TYPE_ACK     0x03   // Board B → Board A: pronto
+#define TYPE_ERR     0x04   // Board B → Board A: errore
+#define TYPE_NONE    0x05   // Board B → Board A: nessuna targa
+#define TYPE_CROP    0x06   // Board A → Board B: crop grayscale
+#define TYPE_TEXT    0x07   // Board B → Board A: stringa targa
 
 // Dimensioni dell'immagine
 #define IMG_W        128
 #define IMG_H         64
-#define GRAY_SIZE    (IMG_W * IMG_H)   // 8192 byte — quello che arriva via UART
+#define GRAY_SIZE    (IMG_W * IMG_H)   // 8192 byte che arriva via UART
 #define MSG_HEADER_SIZE  7
 
 // Parametri OCR
-#define NUM_SLOTS    9     // posizioni della targa
-#define NUM_CLASSES  37   // 0-9 + A-Z + blank '_'
+#define NUM_SLOTS    9     
+#define NUM_CLASSES  37   
 static const char ALPHABET[NUM_CLASSES] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_";
 
 // Gestione della USART2 per comunicazione con la board
 #define UART_B2B     DT_NODELABEL(usart2)
 
 const struct device *uart_b2b = DEVICE_DT_GET(UART_B2B);
-RING_BUF_DECLARE(rx_rb, GRAY_SIZE + MSG_HEADER_SIZE);
+RING_BUF_DECLARE(rx_rb, GRAY_SIZE + MSG_HEADER_SIZE); // Buffer di 8199 byte
 
 // Callback della UART: ogni volta che arriva un byte lo scrive nel buffer
 static void uart_cb(const struct device *dev, void *user_data)
@@ -43,7 +43,7 @@ static void uart_cb(const struct device *dev, void *user_data)
     if (n > 0) ring_buf_put(&rx_rb, tmp, n);
 }
 
-// Legge dal ring buffer, si addormenta finché non c'è un byte
+// Lettura dal ring buffer
 static uint8_t read_byte(void)
 {
     uint8_t c;
@@ -71,6 +71,7 @@ static void send_msg_b2b(uint8_t type, const uint8_t *payload, uint32_t len)
     if (payload && len > 0) write_buf(payload, len);
 }
 
+// Lettura di type, lunghezza e payload del messaggio dalla board
 static int recv_msg_b2b(uint8_t *type, uint8_t *payload,
                         uint32_t max_len, uint32_t *out_len)
 {
@@ -91,8 +92,8 @@ static int recv_msg_b2b(uint8_t *type, uint8_t *payload,
     return 0;
 }
 
-// Union: gray (8192 B ricevuti via UART) e net_in (24576 B = 64×128×3) condividono la RAM.
-// net_in è il membro più grande, la union ha dimensione sufficiente per entrambi.
+// Siccome la rete richiede input a 3 canali, la union alloca RAM per il membro più grande
+// gray (8192 B ricevuti via UART) e net_in (24576 B = 64×128×3) condividono la RAM.
 static union {
     uint8_t gray[GRAY_SIZE];
     uint8_t net_in[STAI_NETWORK_IN_1_SIZE];
@@ -114,7 +115,7 @@ static float dequant_ocr(int8_t v)
     return (v - STAI_NETWORK_OUT_1_ZERO_POINT) * STAI_NETWORK_OUT_1_SCALE;
 }
 
-// Argmax per ogni slot → carattere. Ritorna il numero di caratteri validi (esclude '_').
+// Argmax per ogni slot (carattere). Ritorna il numero di caratteri validi (esclude '_').
 static int decode_plate(char *out_str)
 {
     int n_chars = 0;
@@ -134,6 +135,7 @@ static int decode_plate(char *out_str)
 
 int main(void)
 {
+    // Inizializzazione UART tra le board
     if (!device_is_ready(uart_b2b)) return -1;
     uart_irq_callback_set(uart_b2b, uart_cb);
     uart_irq_rx_enable(uart_b2b);
@@ -160,7 +162,7 @@ int main(void)
         uint8_t type;
         uint32_t len;
 
-        // 1. Ricevi crop da Board A (GRAY_SIZE byte)
+        // Ricezione crop da Board A (GRAY_SIZE byte)
         if (recv_msg_b2b(&type, io_buf.gray, GRAY_SIZE, &len) != 0) {
             uint8_t e = 0x02; send_msg_b2b(TYPE_ERR, &e, 1); continue;
         }
@@ -168,7 +170,7 @@ int main(void)
             uint8_t e = 0x03; send_msg_b2b(TYPE_ERR, &e, 1); continue;
         }
 
-        // 2. Espansione gray → RGB in-place (dal fondo per non sovrascrivere)
+        // Espansione gray → RGB in-place (dal fondo per non sovrascrivere)
         for (int i = GRAY_SIZE - 1; i >= 0; i--) {
             uint8_t g = io_buf.gray[i];
             io_buf.net_in[i * 3 + 0] = g;  // R
@@ -176,14 +178,14 @@ int main(void)
             io_buf.net_in[i * 3 + 2] = g;  // B
         }
 
-        // 3. Inferenza OCR
+        // Inferenza OCR
         stai_return_code rc = stai_network_run(net, STAI_MODE_SYNC);
         if (rc != STAI_SUCCESS) {
             uint8_t e[2] = { 0x04, (uint8_t)(rc & 0xFF) };
             send_msg_b2b(TYPE_ERR, e, 2); continue;
         }
 
-        // 4. Decodifica targa e risposta a Board A
+        // Decodifica targa e risposta a Board A
         char plate[NUM_SLOTS + 1];
         int n_chars = decode_plate(plate);
 
