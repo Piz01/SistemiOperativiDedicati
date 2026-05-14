@@ -8,7 +8,7 @@ PORT     = "COM3"
 BAUD     = 115200
 IMG_W    = 192
 IMG_H    = 192
-IMG_PATH = r"plate_dataset\plate_1.jpg"
+IMG_PATH = r"C:\Users\matte\Desktop\script python\plate_dataset\plate_23.jpg"
 
 # Configurazione del protocollo
 MAGIC_0   = 0xAA
@@ -72,12 +72,10 @@ def prepara_immagine(path):
 
 
 # Funzione che visualizza il risultato con la targa riconosciuta
-def mostra_risultato(path, plate_text):
-    """Mostra l'immagine originale con la targa riconosciuta sovrapposta."""
+def mostra_risultato(path, plate_text, elapsed_ms):
     img = cv2.resize(cv2.imread(path), (IMG_W, IMG_H))
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     img_draw = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-
     cv2.putText(img_draw, plate_text,
                 (10, IMG_H - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
@@ -92,26 +90,30 @@ print(f"Immagine: {IMG_W}x{IMG_H} GRAY CHW = {len(data)} byte")
 with serial.Serial(PORT, BAUD, timeout=30) as ser:
     time.sleep(1)
 
-    print("Attendo boot board A + board B...")
+    print("Attesa boot board A + board B...")
     msg_type, _ = recv_msg(ser)
     if msg_type != TYPE_ACK:
         print(f"Errore boot: risposta inattesa 0x{msg_type:02X}")
         exit(1)
     print("Sistema pronto (Board A + Board B inizializzate)")
 
+    t_start = time.perf_counter()
+
     print("Invio immagine GRAY...")
     send_msg(ser, TYPE_GRAY, data)
 
-    print("Attendo risultato OCR...")
+    print("Attesa risultato OCR...")
     msg_type, payload = recv_msg(ser)
+
+    elapsed_ms = (time.perf_counter() - t_start) * 1000
 
     if msg_type == TYPE_TEXT:
         plate = payload.decode("ascii")
-        print(f"Targa riconosciuta: {plate}")
-        mostra_risultato(IMG_PATH, plate)
+        print(f"Targa riconosciuta: {plate}  [Tempo totale: {elapsed_ms:.1f} ms]")
+        mostra_risultato(IMG_PATH, plate, elapsed_ms)
 
     elif msg_type == TYPE_NONE:
-        print("Nessuna targa rilevata")
+        print(f"Nessuna targa rilevata  [{elapsed_ms:.1f} ms]")
 
     elif msg_type == TYPE_ERR:
         codes = {
@@ -122,7 +124,7 @@ with serial.Serial(PORT, BAUD, timeout=30) as ser:
             0x05: "Ricezione OCR da Board B fallita",
         }
         code = payload[0] if payload else 0
-        print(f"Errore: {codes.get(code, 'sconosciuto')} (0x{code:02X})")
+        print(f"Errore: {codes.get(code, 'sconosciuto')} (0x{code:02X})  [{elapsed_ms:.1f} ms]")
 
     else:
-        print(f"Messaggio inatteso: type=0x{msg_type:02X}, payload={list(payload)}")
+        print(f"Messaggio inatteso: type=0x{msg_type:02X}, payload={list(payload)}  [{elapsed_ms:.1f} ms]")
