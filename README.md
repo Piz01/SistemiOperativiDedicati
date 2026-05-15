@@ -267,5 +267,3 @@ Risorse impiegate sulla Board B:
 - [Roberto Dimitri]
 
 Università Politecnica delle Marche · Corso di laurea in Ingegneria Informatica · A.A. 2025–2026.
-
-Docente: [NOME_PROFESSORE].
