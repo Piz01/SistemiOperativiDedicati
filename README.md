@@ -57,16 +57,13 @@ Il sistema riconosce con successo targhe italiane, svizzere e tedesche, in circa
 
 Esempi dimostrati:
 
-| Targa reale | Riconosciuta | Tempo (ms) | Paese |
-|---|---|---|---|
-| GX597MY | GGX597MY | 4594,2 | Italia |
-| GL814LN | CL814LN | 4593,0 | Italia |
-| FF144AC | FF144AC | 4597,7 | Italia |
-| CA220NE | CA220NE | 4596,2 | Italia |
-| FR477XE | FR477XE | 4593,7 | Italia |
-| TR010NA | TR010NA | 4595,8 | Italia |
-| TI 49959 | TI49959 | 4594,6 | Svizzera |
-| M:G 5387 | MG5387 | 4594,7 | Germania |
+| Targa reale | Riconosciuta | Tempo (ms) |
+|---|---|---|
+| GX597MY | GGX597MY | 4594,2 |
+| GL814LN | CL814LN | 4593,0 |
+| FF144AC | FF144AC | 4597,7 |
+| TI 49959 | TI49959 | 4594,6 |
+| M:G 5387 | MG5387 | 4594,7 |
 
 In uno dei test (`plate_17.webp`) la pipeline non rileva alcuna targa e termina in ~3,5 s; questo caso è discusso nella sezione [Limitazioni note](#limitazioni-note).
 
