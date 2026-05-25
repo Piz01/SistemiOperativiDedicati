@@ -1,0 +1,25 @@
+\chapter{Conclusioni}
+\label{cap:conclusioni}
+
+\section{Riepilogo del lavoro svolto}
+\label{sec:riepilogo}
+
+In questo progetto è stato realizzato un sistema embedded distribuito per il riconoscimento automatico delle targhe, eseguito interamente su due microcontrollori STM32 Nucleo-H745ZI-Q comunicanti via UART. La distribuzione della pipeline ALPR su due schede è stata resa necessaria dai vincoli di memoria del singolo dispositivo e ha costituito al tempo stesso il principale obiettivo didattico del progetto. Le due reti sono state quantizzate e integrate in firmware Zephyr ottimizzati per l'uso della RAM disponibile, attraverso tecniche quali la condivisione di buffer tramite \texttt{union}, l'allocazione statica di tutte le strutture dati e la gestione interrupt-driven delle UART. Il sistema ha dimostrato di funzionare correttamente su un dataset di 26 immagini reali, riconoscendo targhe di paesi diversi con un tempo end-to-end di circa $4{,}6$~secondi e un'occupazione di RAM su Board~A pari al $98\,\%$ della capacità disponibile.
+
+\section{Limitazioni}
+\label{sec:limitazioni}
+
+Le principali limitazioni del sistema riguardano tre aree distinte. Sul piano della \textbf{latenza}, il tempo end-to-end di \textbf{4,6~s} è dominato per l'$85\,\%$ dai trasferimenti UART a $115\,200$~baud (Sezione~\ref{sec:bottleneck}), non dall'inferenza; a questo si aggiunge il fatto che il sistema riceve immagini da un PC host anziché da una camera fisica, aggiungendo un trasferimento che in un'applicazione reale sarebbe eliminato. Sul piano delle \textbf{risorse hardware}, il margine residuo di circa $10$~KB di RAM su Board~A è estremamente sottile e qualsiasi estensione del firmware rischierebbe di superare la capacità disponibile; la mancanza di un acceleratore neurale dedicato (NPU) impone inoltre che l'intera inferenza sia svolta dal Cortex-M7, con tempi che non consentono un'elaborazione real-time. Sul piano dell'\textbf{accuratezza}, il modello CCT-XS occasionalmente confonde caratteri visivamente simili (\texttt{G}/\texttt{C}, \texttt{0}/\texttt{O}) o duplica slot adiacenti, limitazioni intrinseche della rete a bassa risoluzione non risolvibili lato firmware.
+
+\section{Sviluppi futuri}
+\label{sec:sviluppi-futuri}
+
+\paragraph{Canale ad alta velocità.} La modifica con il maggior impatto sulla latenza è la sostituzione della UART con SPI a $8$~Mbps per il canale board-to-board, che ridurrebbe il trasferimento del crop da $710$~ms a meno di $10$~ms. Alzare il baud rate del canale PC$\leftrightarrow$Board~A a $921\,600$ porterebbe la trasmissione dell'immagine da $3{,}2$~s a $400$~ms.
+
+\paragraph{Acquisizione diretta da camera.} L'interfaccia DCMI della H745 consente l'acquisizione da sensore di immagine in modalità DMA, eliminando completamente il trasferimento PC$\rightarrow$Board~A e rendendo il sistema autonomo rispetto all'host.
+
+\paragraph{Migrazione a STM32N6.} La serie STM32N6 integra la NPU Neural-ART, che consentirebbe di eseguire entrambi i modelli su una singola scheda con tempi di inferenza di due ordini di grandezza inferiori, eliminando la comunicazione board-to-board e rendendo possibile l'elaborazione real-time.
+
+\paragraph{Fine-tuning dell'OCR e gestione multi-targa.} Un ulteriore addestramento del CCT-XS su un dataset di targhe italiane ridurrebbe gli errori di confusione tra caratteri. Parallelamente, modificare la NMS per conservare tutte le detection sopra soglia permetterebbe di gestire scene con più veicoli, invocando Board~B una volta per ciascun crop rilevato.
+
+\paragraph{Sfruttamento del dual-core.} Il core Cortex-M4 della H745, attualmente inutilizzato, potrebbe occuparsi della gestione delle UART e del protocollo, lasciando il M7 dedicato all'inferenza e abilitando il pipelining tra ricezione e calcolo.

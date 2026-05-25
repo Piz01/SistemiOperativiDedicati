@@ -1,0 +1,97 @@
+\chapter{Introduzione}
+\label{cap:introduzione}
+
+Questo progetto nasce nell'ambito del corso di \textit{Sistemi Operativi Dedicati} con l'obiettivo di realizzare un sistema embedded distribuito per il riconoscimento automatico delle targhe (\textit{Automatic License Plate Recognition}, ALPR), eseguito interamente su due microcontrollori comunicanti tra loro. Il progetto, denominato \textbf{ALPR distribuito}, è stato sviluppato su due schede STM32 Nucleo-H745ZI-Q e dimostra la fattibilità di una pipeline di intelligenza artificiale a due stadi: rilevamento e riconoscimento su hardware con risorse fortemente limitate, senza ricorrere ad acceleratori esterni o a un host più potente per l'inferenza. Il sistema riceve un'immagine da un PC, ne individua la regione contenente la targa attraverso una rete neurale di \textit{object detection}, ritaglia la regione di interesse (\textit{ROI}) e la trasmette a una seconda scheda che ne estrae il contenuto alfanumerico attraverso una rete di tipo \textit{transformer}.
+
+\section{Motivazioni}
+\label{sec:motivazioni-intro}
+Negli ultimi anni si è affermato il paradigma dell'\textit{Edge AI}, in cui l'inferenza dei modelli neurali viene eseguita direttamente sul dispositivo di acquisizione invece che su un server remoto. Questo approccio è particolarmente interessante per un sistema ALPR, perché riduce la dipendenza dalla rete, contiene la latenza e limita la circolazione di dati sensibili: l'immagine può essere elaborata localmente e verso l'esterno viene comunicata solo la stringa della targa riconosciuta. Portare questa idea su microcontrollori STM32 permette inoltre di ottenere nodi a basso costo, con consumi ridotti e più semplici da installare rispetto a soluzioni basate su GPU o acceleratori embedded. In scenari con molti varchi o postazioni remote, queste caratteristiche incidono direttamente sulla sostenibilità economica ed energetica del sistema, rendendo possibile un dispiegamento più capillare anche in assenza di infrastrutture complesse.
+Questi vantaggi sono, però, accompagnato da vincoli tecnici severi: la STM utilizzata, infatti, non integra unità dedicate per le reti neurali e affida l'intera inferenza al core Cortex-M7; di conseguenza, i modelli devono essere ridotti, quantizzati a 8 bit e organizzati con grande attenzione all'uso della memoria.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        font=\footnotesize,
+        every node/.style={inner sep=2pt}
+    ]
+        % -------- Assi --------
+        % Asse X: consumo (W) in scala log da 0.3 a 30
+        % Asse Y: costo (EUR) in scala log da 10 a 1000
+        % Mapping log -> coordinate cartesiane:
+        %   X: 0.3 W -> 0  ;  3 W -> 4  ;  30 W -> 8
+        %   Y: 10 EUR -> 0 ;  100 EUR -> 3 ;  1000 EUR -> 6
+        % Quindi X in [0, 8], Y in [0, 6].
+ 
+        % Rettangolo di sfondo
+        \draw[->, thick] (0, 0) -- (8.5, 0) node[right] {Consumo [W]};
+        \draw[->, thick] (0, 0) -- (0, 5.2) node[above] {Costo [EUR]};
+ 
+        % Tick X (scala log)
+        \foreach \x/\lab in {0/0.3, 2/1, 4/3, 6/10, 8/30}{
+            \draw[thick] (\x, 0) -- (\x, -0.1) node[below] {\lab};
+        }
+ 
+        % Tick Y (scala log)
+        \foreach \y/\lab in {0/10, 1.5/30, 3/100, 4.5/300}{
+            \draw[thick] (0, \y) -- (-0.1, \y) node[left] {\lab};
+        }
+ 
+        % Griglia leggera
+        \draw[gray!20, very thin] (0,0) grid[xstep=1, ystep=0.75] (8, 5);
+ 
+        % -------- Punti (ognuno con label) --------
+ 
+        % Nucleo STM32 H745  (0.5 W, 30 EUR)
+        % log10(0.5/0.3) / log10(100) * 8  -> ~0.9 ; log10(30/10)/log10(100)*6 -> ~1.43
+        \node[circle, fill=custom_red, minimum size=8pt, label={below right:\textbf{Nucleo H745}}] (a) at (0.9, 1.5) {};
+ 
+        % Raspberry Pi 4  (5 W, 70 EUR)
+        \node[circle, fill=custom_blue, minimum size=6pt, label={above:Raspberry Pi 4}] (b) at (4.9, 2.8) {};
+ 
+        % Coral Dev Board  (3 W, 130 EUR)
+        \node[circle, fill=custom_blue, minimum size=6pt, label={above:Coral Dev}] (c) at (4.0, 3.3) {};
+ 
+        % Jetson Nano  (10 W, 150 EUR)
+        \node[circle, fill=custom_blue, minimum size=6pt, label={right:Jetson Nano}] (d) at (6.0, 3.5) {};
+ 
+        % Jetson Orin Nano  (15 W, 500 EUR)
+        \node[circle, fill=custom_blue, minimum size=6pt, label={above:Jetson Orin}] (e) at (6.7, 4.6) {};
+ 
+        % -------- Freccia "regione favorevole" --------
+        \draw[->, thick, custom_red, dashed]
+            (3.0, 4.5) to[bend right=20] node[midway, above, font=\scriptsize, custom_red, sloped] {edge AI estremo} (1.2, 1.8);
+ 
+    \end{tikzpicture}
+    \caption{Confronto costo-consumo tra la Nucleo H745 e altre piattaforme edge AI}
+    \label{fig:edge-ai-comparison}
+\end{figure}
+
+\section{Obiettivi}
+\label{sec:obiettivi}
+
+Gli obiettivi principali del progetto sono i seguenti:
+
+\begin{itemize}
+    \item \textbf{Distribuire una pipeline ALPR su due microcontrollori}, affidando a ciascuna scheda un singolo stadio della pipeline (detection e OCR) e progettando un protocollo di comunicazione tra le due tramite UART.
+    \item \textbf{Addestrare un detector custom}, basato sull'architettura YOLOv8 in una variante più piccola (denominata \textit{tiny}), su un dataset specifico per targhe automobilistiche, ottimizzandolo per immagini in scala di grigi a bassa risoluzione (192$\times$192~px) compatibili con i vincoli di memoria della scheda di esecuzione.
+    \item \textbf{Integrare un modello OCR pre-addestrato} di tipo Compact Convolutional Transformer~\cite{hassani_2021_cct}, scelto per la sua capacità di operare con un numero di parametri ridotto, e adattarlo al formato di ingresso accettato dalla rete a partire dai dati prodotti dallo stadio di detection.
+    \item \textbf{Sviluppare due firmware Zephyr} indipendenti che orchestrano comunicazione seriale, gestione dei buffer, esecuzione delle reti tramite il runtime \textbf{X-CUBE-AI} di \textit{STMicroelectronics} e sincronizzazione tra le due schede.
+    \item \textbf{Misurare e documentare} le risorse impiegate (RAM, Flash) e le prestazioni del sistema reale, discutendo onestamente le limitazioni emerse e identificando i possibili sviluppi futuri.
+\end{itemize}
+
+\newpage
+\section{Tecnologie utilizzate}
+\label{sec:tecnologie}
+
+Il sistema integra tecnologie eterogenee distribuite su tre livelli logici, ciascuno con un ruolo specifico:
+
+\begin{itemize}
+    \item \textbf{STM32 Nucleo-H745ZI-Q}: due schede di sviluppo dotate di un Cortex-M7 a 480~MHz, 1~MB di Flash on-chip e 512~KB di SRAM principale. La presenza di FPU hardware (FPv5-D16) è essenziale per gestire le operazioni in virgola mobile dei modelli neurali prima della quantizzazione.
+    \item \textbf{Zephyr RTOS}: sistema operativo real-time open source utilizzato per il firmware di entrambe le schede. La sua architettura modulare basata su KConfig e devicetree consente di selezionare solo i moduli effettivamente necessari, riducendo l'occupazione di memoria e permettendo di rispettare i vincoli stringenti del progetto~\cite{zephyr_doc}.
+    \item \textbf{X-CUBE-AI}: pacchetto di STMicroelectronics che converte modelli ONNX in librerie C ottimizzate per le serie STM32. Esegue la quantizzazione INT8 post-training e produce un runtime statico utilizzabile direttamente da Zephyr~\cite{stm32cubeai_doc}.
+    \item \textbf{Ultralytics YOLOv8}~\cite{jocher_2023_yolov8}: framework PyTorch utilizzato per l'addestramento della rete di detection. La variante \textit{tiny} (scala \textit{t}) è stata personalizzata per accettare immagini monocromatiche e prevedere una sola classe.
+    \item \textbf{fast-plate-ocr}~\cite{ankandrew_2024_fastplateocr}: repository open source che mette a disposizione il modello CCT-XS pre-addestrato per la lettura di targhe, esportato in formato ONNX e direttamente compatibile con il flusso di importazione di X-CUBE-AI.
+    \item \textbf{Python 3 e OpenCV}: utilizzati lato host per pre-elaborare le immagini di test, gestire la comunicazione seriale tramite \texttt{pyserial} e visualizzare il risultato finale.
+    \item \textbf{ST Edge AI Developer Cloud}: tool online messo a disposizione da \textit{STMicroelectronics} che consente di ottimizzare e convertire modelli di reti neurali per il deployment su microcontrollori STM32.
+\end{itemize}
+

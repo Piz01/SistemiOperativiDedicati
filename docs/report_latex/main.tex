@@ -1,0 +1,257 @@
+% =====================================================================
+%  Relazione tecnica — Sistemi Operativi Dedicati
+%  Riconoscimento targhe distribuito su due Nucleo STM32 H745ZI-Q
+%  Università Politecnica delle Marche — A.A. 2025/2026
+% =====================================================================
+
+\documentclass[11pt]{report}
+
+% ---------- Lingua e codifica ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[italian]{babel}
+
+% ---------- Geometria pagina ----------
+\usepackage[margin=1.2in]{geometry}
+
+% ---------- Pacchetti generali ----------
+\usepackage{titlesec}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{threeparttable}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage[table]{xcolor}
+\usepackage{inconsolata}
+\usepackage[hidelinks]{hyperref}
+
+% ---------- Listings (codice sorgente) ----------
+\usepackage{listings}
+
+% ---------- TikZ + librerie ----------
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows, positioning, fit, calc, arrows.meta, decorations.pathreplacing}
+
+% ---------- Forest (alberi directory) ----------
+\usepackage{forest}
+
+% ---------- Tcolorbox (riquadri di sintesi) ----------
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable}
+
+% =====================================================================
+%  Palette colori personalizzata
+% =====================================================================
+\definecolor{custom_green}{RGB}{34, 139, 34}
+\definecolor{custom_purple}{RGB}{102, 51, 153}
+\definecolor{custom_blue}{RGB}{30, 90, 180}
+\definecolor{custom_orange}{RGB}{220, 110, 30}
+\definecolor{custom_red}{RGB}{180, 40, 40}
+\definecolor{custom_gray}{RGB}{90, 90, 90}
+\definecolor{custom_lightgray}{RGB}{245, 245, 245}
+\definecolor{custom_lightblue}{RGB}{220, 235, 250}
+\definecolor{custom_boxborder}{RGB}{30, 90, 180}
+
+% =====================================================================
+%  Box di sintesi (boxH) — riquadro azzurro con bordo blu sinistro
+% =====================================================================
+\newtcolorbox{boxH}{
+    enhanced,
+    colback=custom_lightblue,
+    colframe=custom_boxborder,
+    boxrule=0pt,
+    leftrule=2.5pt,
+    arc=2pt,
+    left=8pt, right=8pt, top=6pt, bottom=6pt,
+    breakable
+}
+
+% =====================================================================
+%  Stili listings per i vari linguaggi
+% =====================================================================
+
+% Stile comune di base
+\lstdefinestyle{stileBase}{
+    backgroundcolor=\color{custom_lightgray},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=8pt,
+    numberstyle=\tiny\color{custom_gray},
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=4,
+    frame=single,
+    rulecolor=\color{custom_gray!50},
+    xleftmargin=15pt,
+    framexleftmargin=10pt
+}
+
+% --- Stile Python ---
+\lstdefinestyle{stilePython}{
+    style=stileBase,
+    language=Python,
+    keywordstyle=\color{custom_blue}\bfseries,
+    commentstyle=\color{custom_green}\itshape,
+    stringstyle=\color{custom_orange}
+}
+
+% --- Stile C (firmware Zephyr) ---
+% Estensione delle keyword del C99 con macro e tipi di Zephyr/X-CUBE-AI
+\lstdefinestyle{stileC}{
+    style=stileBase,
+    language=C,
+    keywordstyle=\color{custom_blue}\bfseries,
+    commentstyle=\color{custom_green}\itshape,
+    stringstyle=\color{custom_orange},
+    morekeywords={
+        % Tipi interi a larghezza fissa
+        uint8_t, uint16_t, uint32_t, uint64_t,
+        int8_t, int16_t, int32_t, int64_t,
+        size_t, ssize_t, bool, true, false,
+        % Macro Zephyr e devicetree
+        K_MSEC, K_SECONDS, K_FOREVER, K_NO_WAIT,
+        RING_BUF_DECLARE, DT_NODELABEL, DEVICE_DT_GET,
+        BUILD_ASSERT, LOG_MODULE_REGISTER, LOG_INF, LOG_ERR, LOG_DBG,
+        IS_ENABLED, CONFIG_,
+        % Tipi e funzioni X-CUBE-AI / Zephyr UART
+        stai_network, stai_return_code, stai_handle,
+        uart_irq_callback_set, ring_buf_put, ring_buf_get,
+        % Costanti del nostro protocollo
+        MAGIC_0, MAGIC_1, TYPE_GRAY, TYPE_BBOX, TYPE_ACK,
+        TYPE_ERR, TYPE_NONE, TYPE_CROP, TYPE_TEXT
+    }
+}
+
+% --- Stile YAML (config YOLO) ---
+\lstdefinelanguage{yaml}{
+    keywords={true, false, null, y, n},
+    keywordstyle=\color{custom_blue}\bfseries,
+    sensitive=true,
+    comment=[l]{\#},
+    commentstyle=\color{custom_green}\itshape,
+    morestring=[b]',
+    morestring=[b]",
+    stringstyle=\color{custom_orange}
+}
+\lstdefinestyle{stileYAML}{
+    style=stileBase,
+    language=yaml
+}
+
+% --- Stile Devicetree (.overlay / .dts) ---
+% DTS non è un linguaggio standard di listings: lo definiamo custom.
+\lstdefinelanguage{devicetree}{
+    morekeywords={
+        compatible, status, reg, label, current-speed, clock-frequency,
+        pinctrl-0, pinctrl-names, interrupts, interrupt-parent,
+        dmas, dma-names, parity, stop-bits, data-bits, hw-flow-control
+    },
+    keywordstyle=\color{custom_blue}\bfseries,
+    sensitive=true,
+    morecomment=[l]{//},
+    morecomment=[s]{/*}{*/},
+    commentstyle=\color{custom_green}\itshape,
+    morestring=[b]",
+    stringstyle=\color{custom_orange},
+    alsoletter={-}
+}
+\lstdefinestyle{stileDevicetree}{
+    style=stileBase,
+    language=devicetree
+}
+
+% --- Stile Bash / shell (per comandi west, arm-none-eabi-size ecc.) ---
+\lstdefinestyle{stileBash}{
+    style=stileBase,
+    language=bash,
+    keywordstyle=\color{custom_blue}\bfseries,
+    commentstyle=\color{custom_green}\itshape,
+    stringstyle=\color{custom_orange},
+    morekeywords={west, arm-none-eabi-size, python, pip, source}
+}
+
+% Stile di default
+\lstset{style=stileC}
+
+% =====================================================================
+%  Configurazione titoli capitoli (stile compatto come il template)
+% =====================================================================
+\titleformat{\chapter}[hang]
+  {\normalfont\huge\bfseries}
+  {\thechapter}{1em}{}
+\titlespacing*{\chapter}{0pt}{-20pt}{20pt}
+
+% =====================================================================
+%  Frontespizio
+% =====================================================================
+\begin{document}
+
+\begin{titlepage}
+\begin{center}
+\LARGE {\scshape{Università Politecnica delle Marche}}\\[0.5cm]
+\Large {\scshape{Ingegneria Informatica e dell'Automazione}}\\[0.7cm]
+\linespread{1}
+\huge {\bfseries ALPR su STM32:\\Detection e OCR Distribuiti}\\[0.9cm]
+\linespread{1}
+\includegraphics[width=5cm]{images/Logo_Università_Politecnica_delle_Marche.png}\\[0.5cm]
+\linespread{1.2}
+\Large Corso di\\
+\Large {\scshape{Sistemi Operativi Dedicati}} \\[0.3cm]
+\Large {Anno accademico 2025-2026 \\[0.8cm]}
+\begin{minipage}[t]{0.6\textwidth}
+\vspace{2cm}
+{\Large \textbf{Studenti:}}\\[4pt]
+{\large Anass Chebbaki}\\
+{\large Andrea Pizzuto}\\
+{\large Matteo Stronati}\\
+{\large Matteo Talè}\\
+{\large Roberto Dimitri}\\
+\end{minipage}%
+\hfill
+\begin{minipage}[t]{0.35\textwidth}
+\vspace{4cm}
+{\Large \textbf{Professore:}}\\[4pt]
+{\large Aldo Franco Dragoni}
+\end{minipage}
+
+
+\end{center}
+\end{titlepage}
+
+% =====================================================================
+%  Indice
+% =====================================================================
+\tableofcontents
+\newpage
+
+\listoffigures
+\newpage
+
+% =====================================================================
+%  Capitoli
+% =====================================================================
+\input{capitoli/capitolo1}
+\input{capitoli/capitolo2}
+\input{capitoli/capitolo3}
+\input{capitoli/capitolo4}
+\input{capitoli/capitolo5}
+\input{capitoli/capitolo6}
+\input{capitoli/capitolo7}
+\input{capitoli/capitolo8}
+
+% =====================================================================
+%  Bibliografia
+% =====================================================================
+\bibliographystyle{ieeetr}
+\bibliography{bibl}
+
+\end{document}

@@ -1,0 +1,114 @@
+\chapter{OCR: Board B}
+\label{cap:ocr}
+
+La Board B esegue il secondo stadio della pipeline. A partire dal ritaglio della targa prodotto da Board A, una rete di tipo Compact Convolutional Transformer estrae il contenuto alfanumerico e lo restituisce come stringa di caratteri. A differenza della Board A, qui non c'è un addestramento personalizzato: si è scelto di utilizzare un modello pre-addestrato di alta qualità già disponibile pubblicamente, adattandone soltanto l'integrazione nel contesto embedded.
+
+\section{Modello CCT-XS pre-addestrato}
+\label{sec:cct-xs}
+
+Il modello impiegato è \texttt{cct\_xs\_v1\_global}, distribuito nel repository open source\cite{ankandrew_2024_fastplateocr} mantenuto da ankandrew. Si tratta di una versione \textit{compact} di Vision Transformer (Sezione~\ref{sec:vit-cct}), addestrata specificamente per la lettura di targhe automobilistiche su un dataset multi-paese di grandi dimensioni. Come già discusso la scelta è motivata dal buon compromesso tra dimensioni e accuratezza: la variante \texttt{XS} occupa circa $500$~KB, generalizza su targhe di paesi diversi ed è già disponibile in formato ONNX, quindi può essere importata direttamente in X-CUBE-AI senza ulteriori passaggi da PyTorch. L'addestramento del modello non è stato ripetuto: la rete è utilizzata così com'è fornita dal repository, dopo la sola quantizzazione INT8 effettuata in fase di importazione.
+
+\subsection{Formato di input e output}
+\label{sec:io-cct}
+
+Il modello accetta in ingresso un tensore di forma $[1, 64, 128, 3]$: un'immagine di altezza 64 e larghezza 128 con tre canali RGB. Il fatto che la rete sia stata addestrata su immagini a colori, mentre il flusso del progetto opera in scala di grigi, è gestito dal firmware con un'espansione triviale del canale grigio sui tre canali. L'output è un tensore di forma $[1, 9, 37]$, interpretato come una matrice di logit: ciascuno dei 9 \textit{slot} corrispondenti ai 9 caratteri della targa contiene un vettore di 37 punteggi, uno per ciascuna classe dell'alfabeto. L'alfabeto è composto dalle 10 cifre, dalle 26 lettere maiuscole e dal carattere speciale \texttt{\_} che funge da padding per indicare uno slot non utilizzato.
+
+\begin{lstlisting}[style=stileC, caption={Alfabeto del modello OCR.}, label={lst:alphabet}]
+// Dimensioni dell'immagine
+#define IMG_W        128
+#define IMG_H         64
+#define GRAY_SIZE    (IMG_W * IMG_H)   // 8192 byte che arriva via UART
+#define MSG_HEADER_SIZE  7
+
+// Parametri OCR
+#define NUM_SLOTS    9     
+#define NUM_CLASSES  37   
+static const char ALPHABET[NUM_CLASSES] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_";
+\end{lstlisting}
+
+\section{Integrazione nel firmware}
+\label{sec:firmware-B}
+
+L'architettura del firmware della Board B è più semplice di quella di Board A perché c'è un solo canale UART da gestire e un solo modello da eseguire. Anche qui tutte le strutture dati sono allocate staticamente; il prospetto è riportato in Tabella~\ref{tab:buffer-B}.
+
+\begin{table}[H]
+    \centering
+    \caption{Allocazione statica della RAM nel firmware di Board B.}
+    \label{tab:buffer-B}
+    \begin{tabular}{lrl}
+        \toprule
+        \textbf{Buffer} & \textbf{Dimensione} & \textbf{Funzione} \\
+        \midrule
+        \texttt{io\_buf} (union)   & 24\,576 B   & Crop grayscale e tensore RGB \\
+        \texttt{act\_buf}          & 296\,212 B  & Attivazioni intermedie della rete \\
+        \texttt{out\_ocr}          & 333 B       & Output: $9 \times 37$ INT8 \\
+        \texttt{net\_ctx}          & --          & Contesto della libreria X-CUBE-AI \\
+        \texttt{rx\_rb}            & 8\,199 B    & Ring buffer UART verso Board A \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Gray to RGB in-place}
+\label{sec:rgb-expansion}
+
+L'espansione del canale grigio in tre canali RGB è realizzata in-place sulla stessa union che ospita sia il payload ricevuto (\texttt{gray}, 8\,192 byte) sia l'input della rete (\texttt{net\_in}, 24\,576 byte). Per non sovrascrivere i pixel ancora da espandere, il ciclo procede dal fondo verso l'inizio del buffer, come mostrato nel Listato~\ref{lst:rgb-expand}. Ciascun pixel grigio viene copiato in tre posizioni consecutive del nuovo buffer.
+
+\begin{lstlisting}[
+    style=stileC,
+    caption={Gray to RGB in-place. Il ciclo scorre i pixel dall'ultimo al primo per non sovrascrivere i dati ancora da convertire.},
+    label={lst:rgb-expand}
+]
+// Ricezione crop da Board A (GRAY_SIZE byte)
+if (recv_msg_b2b(&type, io_buf.gray, GRAY_SIZE, &len) != 0) {
+    uint8_t e = 0x02;
+    send_msg_b2b(TYPE_ERR, &e, 1);
+    continue;
+}
+
+if (type != TYPE_CROP || len != GRAY_SIZE) {
+    uint8_t e = 0x03;
+    send_msg_b2b(TYPE_ERR, &e, 1);
+    continue;
+}
+
+// Espansione gray -> RGB in-place
+// (dal fondo per non sovrascrivere)
+for (int i = GRAY_SIZE - 1; i >= 0; i--) {
+    uint8_t g = io_buf.gray[i];
+
+    io_buf.net_in[i * 3 + 0] = g;  // R
+    io_buf.net_in[i * 3 + 1] = g;  // G
+    io_buf.net_in[i * 3 + 2] = g;  // B
+}
+\end{lstlisting}
+
+Questo accorgimento permette di evitare un secondo buffer da $24\,576$ byte e contribuisce in modo significativo al rispetto del budget di RAM disponibile.
+
+\subsection{Decoding dell'output}
+\label{sec:decoding}
+
+La traduzione dei logit in stringa è un classico \textit{greedy decoding}\footnote{Il \textit{greedy decoding} è una strategia di decodifica in cui, ad ogni passo, viene selezionata la classe con probabilità (o logit) massima indipendentemente dalle altre possibili sequenze. Pur non garantendo la sequenza globalmente ottimale, è estremamente efficiente dal punto di vista computazionale ed è adatta a problemi in cui le predizioni dei singoli slot possono essere considerate indipendenti.} per ciascuno slot indipendentemente. La routine \texttt{decode\_plate} (Listato~\ref{lst:decode}) scorre gli slot da sinistra a destra, calcola per ciascuno l'argmax sulle 37 classi e accoda il carattere corrispondente alla stringa di output. La decodifica si interrompe non appena viene incontrato il carattere di padding \texttt{\_}, che segnala la fine della targa: questa scelta riflette il fatto che la rete è stata addestrata a produrre il padding solo dopo l'ultimo carattere significativo, mai in mezzo a una sequenza valida.
+
+\begin{lstlisting}[style=stileC, caption={Decodifica della stringa di targa dai logit dell'OCR. Per ogni slot, si seleziona la classe con punteggio massimo; la decodifica si arresta al primo carattere di padding.}, label={lst:decode}]
+static int decode_plate(char *out_str)
+{
+    int n_chars = 0;
+    for (int slot = 0; slot < NUM_SLOTS; slot++) {
+        int   best_cls   = 0;
+        float best_score = -1e9f;
+        for (int cls = 0; cls < NUM_CLASSES; cls++) {
+            float score = dequant_ocr(out_ocr[slot * NUM_CLASSES + cls]);
+            if (score > best_score) {
+                best_score = score;
+                best_cls = cls;
+            }
+        }
+        if (ALPHABET[best_cls] == '_') break;
+        out_str[n_chars++] = ALPHABET[best_cls];
+    }
+    out_str[n_chars] = '\0';
+    return n_chars;
+}
+\end{lstlisting}
+
+La dequantizzazione è effettuata sui 333 valori INT8 del tensore di output applicando i parametri di \textit{scale} ($\approx 0{,}00392$, ovvero $1/255$) e \textit{zero-point} ($-128$) generati da X-CUBE-AI. Si noti che, ai fini dell'argmax, la dequantizzazione non è strettamente necessaria: poiché la trasformazione è monotona, il massimo dei logit dequantizzati coincide con il massimo dei logit quantizzati. La dequantizzazione esplicita è mantenuta per chiarezza e per permettere eventuali estensioni future, come l'applicazione di una soglia sui punteggi.
