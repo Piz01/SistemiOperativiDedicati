@@ -8,7 +8,7 @@ PORT     = "COM3"
 BAUD     = 115200
 IMG_W    = 192
 IMG_H    = 192
-IMG_PATH = r"C:\Users\matte\Desktop\script python\plate_dataset\plate_23.jpg"
+IMG_PATH = r"" # Inserire qui il path dell'immagine su cui si vuole fare inferenza
 
 # Configurazione del protocollo
 MAGIC_0   = 0xAA
