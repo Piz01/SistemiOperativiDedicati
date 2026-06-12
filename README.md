@@ -5,7 +5,7 @@
 > no GPU, no NPU, no cloud inference.
 
 <p align="center">
-  <img src="docs/report_latex/images/targa_italiana_riconosciuta.png" alt="End-to-end recognition demo" width="720"/>
+  <img src="docs/report_latex/images/report_latex/targa_italiana_riconosciuta.png" alt="End-to-end recognition demo" width="720"/>
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
   <img alt="License"    src="https://img.shields.io/badge/license-Academic-yellow">
 </p>
 
-**Demo video:** 🎬 _[Coming soon — link to be added](https://drive.google.com/REPLACE_WITH_YOUR_LINK)_
+**Demo video:** _[Coming soon — link to be added](https://drive.google.com/REPLACE_WITH_YOUR_LINK)_
 
 **Academic context:** project for the *Sistemi Operativi Dedicati* course,
 Università Politecnica delle Marche, A.Y. 2025–2026.
@@ -49,21 +49,21 @@ Università Politecnica delle Marche, A.Y. 2025–2026.
 
 ## Highlights
 
-- 🎯 **Two-stage pipeline split across two MCUs** — detection on Board A, OCR on
+- **Two-stage pipeline split across two MCUs** — detection on Board A, OCR on
   Board B, joined by a custom UART framing protocol.
-- 🧠 **Custom-trained YOLOv8-tiny** on single-channel 192×192 grayscale input
+- **Custom-trained YOLOv8-tiny** on single-channel 192×192 grayscale input
   (mAP@0.5 = 0.941 on the validation set).
-- 🔡 **CCT-XS transformer for OCR**, deployed off the
+- **CCT-XS transformer for OCR**, deployed off the
   [`fast-plate-ocr`](https://github.com/ankandrew/fast-plate-ocr) project, no
   retraining required.
-- 📉 **INT8 post-training quantization** through ST's X-CUBE-AI, with the
+- **INT8 post-training quantization** through ST's X-CUBE-AI, with the
   RAM-optimized profile, fits both networks into 512 KB of SRAM.
-- ⚙️ **Zephyr RTOS firmware** with interrupt-driven UART, ring buffers, and a
+- **Zephyr RTOS firmware** with interrupt-driven UART, ring buffers, and a
   static-allocation memory plan that gets Board A to **98 % RAM occupancy**
   without dynamic allocation.
-- 🌍 **Multi-country recognition** — Italian, Swiss, and German plates work out
+- **Multi-country recognition** — Italian, Swiss, and German plates work out
   of the box without retraining the OCR head.
-- 🔬 **Deterministic latency**: ~4.6 s end-to-end with σ < 2 ms across runs.
+- **Deterministic latency**: ~4.6 s end-to-end with σ < 2 ms across runs.
 
 ---
 
@@ -74,18 +74,8 @@ Università Politecnica delle Marche, A.Y. 2025–2026.
 The system is a three-node pipeline. The host PC is only an image source —
 **all inference runs on the microcontrollers**.
 
-```
-┌────────────┐  USART3       ┌──────────────────┐  USART2       ┌──────────────────┐
-│  PC host   │ ─────────────▶│  Board A (M7)    │ ─────────────▶│  Board B (M7)    │
-│  Python    │  36 864 B     │  YOLOv8-tiny     │   8 192 B     │  CCT-XS OCR      │
-│  test img  │   GRAY 192²   │  + NMS + crop    │   GRAY 128×64 │  + greedy decode │
-│            │◀───────────── │                  │◀─────────────│                  │
-└────────────┘   ≤ 9 chars   └──────────────────┘   ≤ 9 chars   └──────────────────┘
-                  plate string                       plate string
-```
-
 <p align="center">
-  <img src="docs/images/flusso_nodi.png" alt="Data flow across the three nodes" width="640"/>
+  <img src="docs/report_latex/images/flusso_nodi.png" alt="Data flow across the three nodes" width="720"/>
 </p>
 
 ### Per-stage responsibilities
@@ -119,22 +109,18 @@ before both boards have finished initializing their neural runtime.
 ### Memory layout and the `union` trick
 
 The single most important RAM optimisation: Board A reuses the same physical
-36 864-byte buffer in **three successive states** through a C `union`:
+36 864-byte buffer in **three successive states** through a C `union`.
 
 ```c
 static union {
-    uint8_t gray[GRAY_SIZE];                  /* received: pixels ∈ [0, 255]   */
-    int8_t  net_in[STAI_NETWORK_IN_1_SIZE];   /* quantized: ∈ [−128, 127]      */
+    uint8_t gray[GRAY_SIZE];                  /* received: pixels in [0, 255]   */
+    int8_t  net_in[STAI_NETWORK_IN_1_SIZE];   /* quantized: in [-128, 127]      */
 } io_buf __attribute__((aligned(4)));
 ```
 
-| t | Active field    | Type     | Range          | Stage                              |
-|---|-----------------|----------|----------------|------------------------------------|
-| 1 | `io_buf.gray`   | `uint8`  | `[0, 255]`     | After UART reception               |
-| 2 | `io_buf.net_in` | `int8`   | `[−128, 127]`  | Quantized input to the network     |
-| 3 | `io_buf.gray`   | `uint8`  | `[0, 255]`     | Restored for crop construction     |
-
-This single technique saves 36 864 bytes of RAM, which is the difference
+The same memory holds the freshly received grayscale image, then the INT8
+quantized input tensor, and finally the dequantized pixels used to build the
+crop. This single technique saves 36 864 bytes of RAM, which is the difference
 between fitting Board A's firmware and not.
 
 A similar in-place expansion is used on Board B: the 8 192-byte grayscale crop
@@ -163,17 +149,17 @@ Cortex-M7 only.
 | RX       | `PD6`   | Board B `PD5` → Board A `PD6`     |
 | GND      | `GND`   | **Common ground (mandatory)**     |
 
-> ⚠️  A shared GND is **required**, not optional. UART is single-ended and
-> without a common voltage reference the receiver cannot interpret the
-> transmitter's logic levels.
+A shared GND is **required**, not optional. UART is single-ended and without a
+common voltage reference the receiver cannot interpret the transmitter's logic
+levels.
 
 The PC connects to Board A via the on-board ST-Link, which exposes a virtual
 serial port mapped to USART3.
 
 <p align="center">
-  <img src="docs/images/immagine_collegamenti.png" alt="Hardware wiring diagram" width="520"/>
-  &nbsp;
-  <img src="docs/images/setup_board.jpeg" alt="Physical test bench" width="320"/>
+  <img src="docs/report_latex/images/immagine_collegamenti.png" alt="Hardware wiring diagram" width="420"/>
+  &nbsp;&nbsp;
+  <img src="docs/report_latex/images/setup_board.jpeg" alt="Physical test bench" width="320"/>
 </p>
 
 ---
@@ -181,14 +167,11 @@ serial port mapped to USART3.
 ## Communication Protocol
 
 Every UART exchange is wrapped in a fixed 7-byte header followed by a
-variable-length payload:
+variable-length payload.
 
-```
-┌──────────┬──────────┬────────┬─────────────────────┬───────────────┐
-│ MAGIC_0  │ MAGIC_1  │  TYPE  │  LENGTH (4 B BE)    │  PAYLOAD ...  │
-│  0xAA    │  0xBB    │  (1 B) │   (big-endian)      │   (N bytes)   │
-└──────────┴──────────┴────────┴─────────────────────┴───────────────┘
-```
+<p align="center">
+  <img src="docs/report_latex/images/protocollo_comunicazione.png" alt="Application frame format" width="640"/>
+</p>
 
 Defined message types:
 
@@ -238,6 +221,17 @@ RGB-pretrained checkpoints).
 | Recall         | 0.908  |
 | F1 score       | 0.942  |
 
+Qualitative inference on out-of-sample images:
+
+<p align="center">
+  <img src="docs/report_latex/images/yolov8t_test/plate_a.png" alt="YOLO inference example A" width="320"/>
+  <img src="docs/report_latex/images/yolov8t_test/plate_b.png" alt="YOLO inference example B" width="320"/>
+</p>
+<p align="center">
+  <img src="docs/report_latex/images/yolov8t_test/plate_c.png" alt="YOLO inference example C" width="320"/>
+  <img src="docs/report_latex/images/yolov8t_test/plate_d.png" alt="YOLO inference example D" width="320"/>
+</p>
+
 ### OCR — Compact Convolutional Transformer XS
 
 Pretrained `cct_xs_v1_global` from the
@@ -251,6 +245,10 @@ Transformers"* (Hassani et al., 2021, [arXiv:2104.05704](https://arxiv.org/abs/2
 - **Decoding**: greedy argmax per slot, stops at the first `_` (padding)
 - **No retraining** — the model is used as published, only INT8-quantized via
   X-CUBE-AI
+
+<p align="center">
+  <img src="docs/report_latex/images/cvtransofrmer.png" alt="Compact Convolutional Transformer architecture" width="560"/>
+</p>
 
 ### X-CUBE-AI footprint (RAM-optimized profile)
 
@@ -272,12 +270,12 @@ plates. The OCR head generalises across plate formats without per-country
 retraining.
 
 <p align="center">
-  <img src="docs/images/targa_italiana_riconosciuta.png" alt="Italian plate recognition" width="380"/>
-  <img src="docs/images/targa_svizzera_riconosciuta.png" alt="Swiss plate recognition"   width="380"/>
+  <img src="docs/report_latex/images/targa_italiana_riconosciuta.png" alt="Italian plate recognition"   width="380"/>
+  <img src="docs/report_latex/images/targa_svizzera_riconosciuta.png" alt="Swiss plate recognition"     width="380"/>
 </p>
 <p align="center">
-  <img src="docs/images/targa_tedesca_riconosciuta.png"  alt="German plate recognition"   width="380"/>
-  <img src="docs/images/targa_italiana_riconosciuta_2.png" alt="Italian plate, second example" width="380"/>
+  <img src="docs/report_latex/images/targa_tedesca_riconosciuta.png"  alt="German plate recognition"    width="380"/>
+  <img src="docs/report_latex/images/targa_italiana_riconosciuta_2.png" alt="Italian plate, second example" width="380"/>
 </p>
 
 ### Timing breakdown
@@ -293,21 +291,22 @@ End-to-end latency is **markedly deterministic**: σ < 2 ms across runs.
 | **Mean**  | **4 595.17**    |
 | **Std.**  | **1.74**        |
 
-The bottleneck is **not** inference — it is UART transmission:
+The bottleneck is **not** inference — it is UART transmission. At 115 200 baud
+with 8N1 framing the effective throughput is 11 520 B/s, so the
+PC → Board A transfer of the 36 864-byte image takes roughly 3.20 s and the
+Board A → Board B transfer of the 8 192-byte crop adds another 0.71 s. The two
+UART transfers alone account for about **3.91 s — roughly 85 % of the total**.
+Inference and post-processing together account for less than 15 %, around
+680 ms.
 
-```
-PC → Board A : 36 864 B / 11 520 B·s⁻¹  ≈ 3.20 s
-Board A → B  :  8 192 B / 11 520 B·s⁻¹  ≈ 0.71 s
-                                        ──────
-                          UART transfers ≈ 3.91 s  (≈ 85 % of total)
-
-Inference + post-processing                 ≈ 0.68 s  (< 15 % of total)
-```
-
-When no plate is detected the pipeline returns `TYPE_NONE` in ~3 484 ms — about
+When no plate is detected the pipeline returns `TYPE_NONE` in ~3 484 ms, about
 1 100 ms shorter than the success path, which is exactly the time saved by
 **not** transferring the crop, **not** running the CCT inference, and **not**
 sending the result back.
+
+<p align="center">
+  <img src="docs/report_latex/images/nessuna_targa.png" alt="No plate detected — terminal output" width="640"/>
+</p>
 
 ### Memory occupancy (Zephyr linker report)
 
@@ -316,12 +315,12 @@ sending the result back.
 | A (detection) | 907.16 KB    | 88.6 %| 502.00 KB   | **98.1 %** |
 | B (OCR)       | 812.23 KB    | 79.3 %| 384.63 KB   | 75.1 %    |
 
-Board A sits at the absolute limit — about 10 KB of RAM headroom is what's
+Board A sits at the absolute limit — about 10 KB of RAM headroom is what is
 left for the entire system. The `union` trick was not a nice-to-have, it was
 the difference between fitting and not fitting.
 
 <p align="center">
-  <img src="docs/images/occupazione_memoria_board.png" alt="Zephyr linker report for both boards" width="780"/>
+  <img src="docs/report_latex/images/occupazione_memoria_board.png" alt="Zephyr linker report for both boards" width="780"/>
 </p>
 
 ### Observed OCR errors
@@ -331,6 +330,11 @@ Two recurring patterns, both attributable to the OCR rather than the detector:
 - **Visually similar character confusion**: `G`↔`C`, `N`↔`M`, `0`↔`O`.
 - **Slot duplication**: tilted plates can cause a single character to activate
   two adjacent decoding slots (e.g. `GX597NY` → `GGX597MY`).
+
+<p align="center">
+  <img src="docs/report_latex/images/targa_italiana_errore1.png" alt="OCR error example — character confusion" width="380"/>
+  <img src="docs/report_latex/images/targa_italiana_errore2.png" alt="OCR error example — slot duplication"    width="380"/>
+</p>
 
 These are inherent limitations of a 128×64 OCR resolution and are accentuated
 by the upscaling of small crops.
@@ -343,8 +347,10 @@ by the upscaling of small crops.
 SistemiOperativiDedicati/
 ├── README.md
 ├── docs/
-│   ├── Relazione_SOD.pdf                  ← full project report (Italian)
-│   └── images/                            ← figures used in this README
+│   ├── main.tex                           ← full project report (LaTeX source)
+│   ├── bibl.bib
+│   ├── capitoli/                          ← report chapters
+│   └── images/                            ← figures (also used in this README)
 ├── YOLO training notebook/
 │   └── Training_YOLO_network.ipynb        ← Colab training + ONNX export
 ├── models/
@@ -458,28 +464,27 @@ input image.
 
 ## Future Work
 
-- 🚀 **SPI inter-board link at 8 Mbps** — eliminates ~700 ms of latency.
-- 📷 **Direct camera capture via DCMI + DMA** — removes the PC dependency and
+- **SPI inter-board link at 8 Mbps** — eliminates ~700 ms of latency.
+- **Direct camera capture via DCMI + DMA** — removes the PC dependency and
   makes the system standalone.
-- 🧠 **STM32N6 with Neural-ART NPU** — could collapse both stages onto a single
+- **STM32N6 with Neural-ART NPU** — could collapse both stages onto a single
   board and bring end-to-end latency well under one second.
-- 🎓 **OCR fine-tuning** on a country-specific dataset to address
-  `G`/`C`, `N`/`M`, `0`/`O` confusion.
-- 🧵 **Cortex-M4 offload** — the dormant M4 core could handle UART and
-  framing, letting the M7 overlap reception and inference.
+- **OCR fine-tuning** on a country-specific dataset to address `G`/`C`,
+  `N`/`M`, `0`/`O` confusion.
+- **Cortex-M4 offload** — the dormant M4 core could handle UART and framing,
+  letting the M7 overlap reception and inference.
 
 ---
 
 ## Documentation
 
-The full project report (in Italian) is available at
-[`docs/Relazione_SOD.pdf`](docs/Relazione_SOD.pdf).
-It covers the theoretical background (CNN detection, Vision Transformers,
-INT8 quantization), the training pipeline, the firmware architecture, the
-communication protocol, and a deeper experimental analysis.
+The full project report (in Italian) is built from the LaTeX sources under
+[`docs/`](docs/). It covers the theoretical background (CNN detection, Vision
+Transformers, INT8 quantization), the training pipeline, the firmware
+architecture, the communication protocol, and a deeper experimental analysis.
 
-A 🎬 **demo video** showcasing the system running end-to-end is available at:
-**[Google Drive link — to be added]**(https://drive.google.com/REPLACE_WITH_YOUR_LINK)
+A demo video showcasing the system running end-to-end is available at:
+**[Google Drive link — to be added](https://univpm-my.sharepoint.com/:v:/g/personal/s1122745_studenti_univpm_it/IQCJgwEx-wvmRbtjWSHuLPTcAV2w0deX6wlaycEp7qrU1Z8?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=hgXdcK)**
 
 ---
 
