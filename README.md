@@ -5,7 +5,7 @@
 > no GPU, no NPU, no cloud inference.
 
 <p align="center">
-  <img src="docs/images/targa_italiana_riconosciuta.png" alt="End-to-end recognition demo" width="720"/>
+  <img src="docs/report_latex/images/targa_italiana_riconosciuta.png" alt="End-to-end recognition demo" width="720"/>
 </p>
 
 <p align="center">
