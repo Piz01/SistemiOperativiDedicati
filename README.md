@@ -5,7 +5,7 @@
 > no GPU, no NPU, no cloud inference.
 
 <p align="center">
-  <img src="docs/report_latex/images/report_latex/targa_italiana_riconosciuta.png" alt="End-to-end recognition demo" width="720"/>
+  <img src="docs/report_latex/images/targa_italiana_riconosciuta.png" alt="End-to-end recognition demo" width="720"/>
 </p>
 
 <p align="center">
@@ -347,10 +347,12 @@ by the upscaling of small crops.
 SistemiOperativiDedicati/
 ├── README.md
 ├── docs/
-│   ├── main.tex                           ← full project report (LaTeX source)
-│   ├── bibl.bib
-│   ├── capitoli/                          ← report chapters
-│   └── images/                            ← figures (also used in this README)
+│   ├── report.pdf                         ← compiled project report (Italian)
+│   └── report_latex/                      ← LaTeX sources
+│       ├── main.tex
+│       ├── bibl.bib
+│       ├── capitoli/                      ← report chapters
+│       └── images/                        ← figures (also used in this README)
 ├── YOLO training notebook/
 │   └── Training_YOLO_network.ipynb        ← Colab training + ONNX export
 ├── models/
@@ -478,13 +480,15 @@ input image.
 
 ## Documentation
 
-The full project report (in Italian) is built from the LaTeX sources under
-[`docs/`](docs/). It covers the theoretical background (CNN detection, Vision
-Transformers, INT8 quantization), the training pipeline, the firmware
-architecture, the communication protocol, and a deeper experimental analysis.
+The full project report (in Italian) is available as a compiled PDF at
+[`docs/report.pdf`](docs/report.pdf), with the LaTeX sources under
+[`docs/report_latex/`](docs/report_latex/). It covers the theoretical
+background (CNN detection, Vision Transformers, INT8 quantization), the
+training pipeline, the firmware architecture, the communication protocol, and
+a deeper experimental analysis.
 
 A demo video showcasing the system running end-to-end is available at:
-**[Google Drive link — to be added](https://univpm-my.sharepoint.com/:v:/g/personal/s1122745_studenti_univpm_it/IQCJgwEx-wvmRbtjWSHuLPTcAV2w0deX6wlaycEp7qrU1Z8?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=hgXdcK)**
+**[Google Drive link — to be added](https://drive.google.com/REPLACE_WITH_YOUR_LINK)**
 
 ---
 
