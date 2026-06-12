@@ -18,7 +18,7 @@
   <img alt="License"    src="https://img.shields.io/badge/license-Academic-yellow">
 </p>
 
-**Demo video:** _[Coming soon — link to be added](https://drive.google.com/REPLACE_WITH_YOUR_LINK)_
+**Demo video:** _[LINK](https://univpm-my.sharepoint.com/:v:/g/personal/s1122745_studenti_univpm_it/IQCJgwEx-wvmRbtjWSHuLPTcAV2w0deX6wlaycEp7qrU1Z8?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=hgXdcK)_
 
 **Academic context:** project for the *Sistemi Operativi Dedicati* course,
 Università Politecnica delle Marche, A.Y. 2025–2026.
@@ -487,8 +487,6 @@ background (CNN detection, Vision Transformers, INT8 quantization), the
 training pipeline, the firmware architecture, the communication protocol, and
 a deeper experimental analysis.
 
-A demo video showcasing the system running end-to-end is available at:
-**[Google Drive link — to be added](https://drive.google.com/REPLACE_WITH_YOUR_LINK)**
 
 ---
 
